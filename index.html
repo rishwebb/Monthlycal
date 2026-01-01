@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consistency Tracker OS</title>
+    <style>
+        :root {
+            /* THEME: JOLLY CELEBRATION (Purple, Pink, Gold) */
+            --bg-color: #2e1065;
+            --bg-gradient: radial-gradient(circle at bottom center, #831843, #4c1d95, #0f172a);
+            --card-bg: rgba(255, 255, 255, 0.1);
+            --card-border: rgba(255,255,255,0.2);
+            
+            --primary: #fbbf24; /* Bright Gold */
+            --accent: #f472b6;  /* Soft Pink */
+            --success: #34d399; /* Mint Green */
+            --warning: #fb923c; /* Orange */
+            --missed: #f87171;  /* Soft Red */
+            
+            --text-main: #ffffff;
+            --text-muted: #e2e8f0;
+            --input-bg: rgba(0, 0, 0, 0.2); 
+            --font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--font-family);
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .hidden { display: none !important; }
+        .fade-in { animation: fadeIn 0.5s ease forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Canvas Background */
+        #fireworks-canvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* --- CSS FIX: Hide Number Input Spinners --- */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+
+        /* --- SCREEN: PROFILE SELECTOR --- */
+        #screen-profiles {
+            width: 100%; max-width: 900px;
+            padding: 40px; z-index: 10;
+            text-align: center;
+        }
+        .profile-grid {
+            display: flex; flex-wrap: wrap; justify-content: center; gap: 30px; margin-top: 40px;
+        }
+        .profile-card {
+            width: 150px; height: 180px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            cursor: pointer; position: relative;
+            transition: 0.3s;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .profile-card:hover { transform: translateY(-5px); border-color: var(--primary); box-shadow: 0 10px 30px rgba(251, 191, 36, 0.3); }
+        .profile-avatar {
+            width: 70px; height: 70px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), #d97706);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 2rem; font-weight: bold; color: #fff;
+            margin-bottom: 15px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .profile-name { font-weight: bold; font-size: 1.1rem; }
+        .btn-delete-user {
+            position: absolute; top: -10px; right: -10px;
+            background: var(--missed); width: 30px; height: 30px;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 0.9rem; cursor: pointer; border: 2px solid var(--bg-color);
+            opacity: 0; transition: 0.2s;
+        }
+        .profile-card:hover .btn-delete-user { opacity: 1; }
+        .add-card { border-style: dashed; border-color: var(--text-muted); opacity: 0.8; }
+        .add-card:hover { border-color: var(--success); opacity: 1; color: var(--success); }
+
+        /* --- SCREEN: IMPORT --- */
+        #screen-import {
+            height: 100vh; display: flex; align-items: center; justify-content: center; z-index: 20;
+            position: fixed; top: 0; left: 0; width: 100%; background: rgba(0,0,0, 0.8); backdrop-filter: blur(8px);
+        }
+        .auth-card {
+            background: #1e1b4b; padding: 40px; border-radius: 20px;
+            border: 1px solid var(--card-border); text-align: center; max-width: 500px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+        textarea {
+            width: 100%; height: 100px; background: rgba(0,0,0,0.3);
+            border: 1px solid var(--card-border); border-radius: 10px;
+            color: var(--text-main); padding: 15px; margin: 20px 0;
+            resize: none; font-family: monospace;
+        }
+
+        /* --- SCREEN: DASHBOARD --- */
+        #screen-dashboard {
+            width: 100%; max-width: 1200px; padding: 20px; z-index: 10; margin-top: 20px;
+        }
+        
+        /* Header Bar */
+        .dash-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .user-badge { display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.2); padding: 5px 15px 5px 5px; border-radius: 50px; border: 1px solid var(--card-border); }
+        .btn-small {
+            padding: 8px 15px; font-size: 0.9rem; background: rgba(0,0,0,0.3); border: 1px solid var(--card-border);
+            border-radius: 20px; color: var(--text-muted); cursor: pointer; transition: 0.2s;
+        }
+        .btn-small:hover { color: var(--text-main); border-color: var(--primary); background: rgba(251, 191, 36, 0.1); }
+
+        /* Notification Bar */
+        #notification-bar {
+            background: rgba(248, 113, 113, 0.2); border: 1px solid var(--missed);
+            color: #fecaca; padding: 15px; border-radius: 10px; margin-bottom: 20px;
+            display: flex; align-items: center; gap: 15px;
+        }
+
+        .main-grid { display: grid; grid-template-columns: 1fr 350px; gap: 20px; }
+        @media (max-width: 800px) { .main-grid { grid-template-columns: 1fr; } }
+
+        .glass-panel {
+            background: var(--card-bg); backdrop-filter: blur(12px);
+            border-radius: 20px; border: 1px solid var(--card-border); padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        /* Calendar */
+        .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+        .day-name { text-align: center; color: var(--text-muted); font-size: 0.9rem; padding-bottom: 10px; font-weight: bold; }
+        .day-cell {
+            aspect-ratio: 1; border-radius: 12px; background: var(--input-bg);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: 0.2s; border: 2px solid transparent;
+            font-weight: 500;
+        }
+        .day-cell:hover:not(.disabled) { background: rgba(255,255,255,0.1); transform: scale(1.05); }
+        .day-cell.today { border-color: var(--primary); box-shadow: 0 0 15px rgba(251, 191, 36, 0.4); background: rgba(251, 191, 36, 0.1); }
+        .day-cell.logged { background: rgba(52, 211, 153, 0.2); border-color: var(--success); color: #6ee7b7; }
+        .day-cell.missed { background: rgba(248, 113, 113, 0.1); border-color: var(--missed); color: #fca5a5; }
+        .day-cell.disabled { opacity: 0.2; cursor: default; }
+        .day-cell.selected { background: var(--primary); color: #000; font-weight: bold; border-color: var(--primary); }
+
+        /* Input Form Styles */
+        .input-group { margin-bottom: 20px; }
+        /* Label for text inputs (like "Study Hours") */
+        .input-group label.text-label { display: block; margin-bottom: 8px; color: var(--text-muted); font-size: 0.9rem; }
+        
+        .input-group input[type="number"], .input-group select {
+            width: 100%; padding: 12px; background: var(--input-bg);
+            border: 1px solid var(--card-border); border-radius: 10px; color: var(--text-main); outline: none;
+            transition: 0.3s;
+        }
+        .input-group input:focus { border-color: var(--primary); box-shadow: 0 0 10px rgba(251, 191, 36, 0.2); }
+        
+        /* --- FIXED: CHECKBOX ALIGNMENT --- */
+        /* Increased specificity to ensure flexbox rules are applied */
+        .input-group .checkbox-group { 
+            display: flex !important; 
+            align-items: center; 
+            gap: 15px; 
+            padding: 12px; 
+            background: var(--input-bg); 
+            border-radius: 10px; 
+            cursor: pointer; 
+            transition: 0.2s; 
+            border: 1px solid transparent;
+            width: 100%;
+        }
+        .input-group .checkbox-group:hover { background: rgba(255,255,255,0.1); }
+        .input-group .checkbox-group input { 
+            width: 20px; height: 20px; accent-color: var(--primary); margin: 0;
+        }
+        .input-group .checkbox-group span {
+            margin-top: 2px; /* Slight visual adjustment for font baseline */
+            line-height: 1;
+        }
+
+        /* Buttons */
+        .btn-primary {
+            width: 100%; padding: 15px; border-radius: 50px; border: none;
+            background: linear-gradient(135deg, var(--primary), #f59e0b);
+            color: #0f172a; font-weight: 800; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(251, 191, 36, 0.4); }
+
+        /* --- SCREEN: ANALYSIS MODAL --- */
+        #modal-analysis {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0, 0.9); z-index: 50;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .analysis-card {
+            background: #1e1b4b; width: 90%; max-width: 600px;
+            padding: 40px; border-radius: 20px; border: 1px solid var(--primary);
+            max-height: 90vh; overflow-y: auto; box-shadow: 0 0 50px rgba(251, 191, 36, 0.2);
+        }
+        .stat-row { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .stat-verdict { font-size: 2rem; font-weight: 900; text-align: center; margin: 20px 0; letter-spacing: -1px; }
+
+    </style>
+</head>
+<body>
+
+    <canvas id="fireworks-canvas"></canvas>
+
+    <div id="screen-profiles" class="fade-in">
+        <h1 style="font-weight: 800; font-size: 2.5rem; text-shadow: 0 4px 10px rgba(0,0,0,0.3);">Consistency Tracker OS</h1>
+        <p style="color: var(--text-muted); margin-top: 10px;">Select your profile to continue</p>
+        <div class="profile-grid" id="profile-list">
+            <div class="profile-card add-card" onclick="showImportScreen()">
+                <div class="profile-avatar" style="background: none; border: 2px dashed var(--text-muted); color: var(--text-muted);">+</div>
+                <div class="profile-name">Add User</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="screen-import" class="hidden">
+        <div class="auth-card fade-in">
+            <h2>🔗 Add New Profile</h2>
+            <p style="color: var(--text-muted); margin-top: 10px;">Paste the code from the 2026 Planner.</p>
+            <textarea id="import-code" placeholder="Paste Base64 code here..."></textarea>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-primary" onclick="importData()">Import Profile</button>
+                <button class="btn-small" onclick="closeImportScreen()">Cancel</button>
+            </div>
+            <p id="auth-error" style="color: var(--missed); margin-top: 10px;" class="hidden">Invalid code.</p>
+        </div>
+    </div>
+
+    <div id="screen-dashboard" class="hidden">
+        
+        <div class="dash-header">
+            <div class="user-badge">
+                <div class="profile-avatar" id="dash-avatar" style="width: 35px; height: 35px; font-size: 1rem; margin:0;">R</div>
+                <h3 id="dash-username" style="margin: 0 10px;">Rishav</h3>
+            </div>
+            <button class="btn-small" onclick="logout()">← Switch Profile</button>
+        </div>
+
+        <div id="notification-bar" class="hidden">
+            <span style="font-size: 1.2rem;">⚠️</span>
+            <div><strong>Missing Data:</strong> <span id="missed-msg"></span></div>
+        </div>
+
+        <div class="main-grid">
+            <div class="glass-panel">
+                <div class="calendar-header">
+                    <h2 id="month-display">January 2026</h2>
+                    <div style="font-size: 0.9rem; color: var(--text-muted);">
+                        <span style="color:var(--success)">●</span> Logged
+                        <span style="color:var(--missed)">●</span> Missed
+                    </div>
+                </div>
+                <div class="calendar-grid" id="calendar-grid"></div>
+
+                <div style="margin-top: 30px; text-align: center;">
+                    <button class="btn-small" onclick="generateMonthlyReport()" style="width: 100%; padding: 15px; border: 2px solid var(--primary); color: var(--primary); background: transparent; font-weight: bold;">📊 Generate Monthly Smart Report</button>
+                </div>
+            </div>
+
+            <div class="glass-panel slide-up">
+                <h3 id="selected-date-header" style="border-bottom: 1px solid var(--card-border); padding-bottom: 15px; margin-bottom: 25px; color: var(--primary);">Select a date</h3>
+                
+                <div id="input-form" class="hidden">
+                    <div class="input-group">
+                        <label class="text-label">📚 Study Hours</label>
+                        <input type="number" id="inp-study" min="0" step="0.5" placeholder="0">
+                    </div>
+                    <div class="input-group">
+                        <label class="checkbox-group">
+                            <input type="checkbox" id="inp-fitness">
+                            <span>💪 Fitness Done?</span>
+                        </label>
+                    </div>
+                    <div class="input-group">
+                        <label class="text-label">🎨 Creative Projects</label>
+                        <input type="number" id="inp-creative" min="0" placeholder="0">
+                    </div>
+                    <div class="input-group">
+                        <label class="checkbox-group">
+                            <input type="checkbox" id="inp-mental">
+                            <span>🧘 Mental Peace?</span>
+                        </label>
+                    </div>
+                    <div class="input-group">
+                        <label class="checkbox-group">
+                            <input type="checkbox" id="inp-hobby">
+                            <span>🎸 Hobby?</span>
+                        </label>
+                    </div>
+
+                    <button class="btn-primary" onclick="saveDailyLog()">Save Entry ✅</button>
+                </div>
+                
+                <div id="future-msg" class="hidden" style="text-align: center; color: var(--text-muted); padding: 40px 0;">
+                    Cannot log future dates.<br>Focus on today.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-analysis" class="hidden">
+        <div class="analysis-card fade-in">
+            <h2 style="text-align: center; margin-bottom: 20px; color: var(--primary);">📅 Monthly Smart Report</h2>
+            <div id="analysis-content"></div>
+            <button class="btn-primary" onclick="document.getElementById('modal-analysis').classList.add('hidden')" style="margin-top: 30px;">Close Report</button>
+        </div>
+    </div>
+
+    <script>
+        // --- DATA STRUCTURE ---
+        let db = { profiles: [] };
+        let activeProfile = null;
+        let selectedDate = null;
+
+        // --- INIT ---
+        window.onload = function() {
+            loadDB();
+            renderProfiles();
+            resizeCanvas();
+            loop(); // Start fireworks loop
+        };
+
+        function loadDB() {
+            const raw = localStorage.getItem('consistency_os_v1');
+            if(raw) db = JSON.parse(raw);
+        }
+
+        function saveDB() {
+            localStorage.setItem('consistency_os_v1', JSON.stringify(db));
+        }
+
+        // --- PROFILE MANAGEMENT ---
+        function renderProfiles() {
+            const list = document.getElementById('profile-list');
+            list.innerHTML = `
+            <div class="profile-card add-card" onclick="showImportScreen()">
+                <div class="profile-avatar" style="background: none; border: 2px dashed var(--text-muted); color: var(--text-muted);">+</div>
+                <div class="profile-name">Add User</div>
+            </div>`;
+
+            db.profiles.forEach(p => {
+                const initial = p.name.charAt(0).toUpperCase();
+                const div = document.createElement('div');
+                div.className = 'profile-card fade-in';
+                div.onclick = (e) => { if(!e.target.classList.contains('btn-delete-user')) login(p.id); };
+                div.innerHTML = `
+                    <div class="btn-delete-user" onclick="deleteProfile('${p.id}')">✕</div>
+                    <div class="profile-avatar">${initial}</div>
+                    <div class="profile-name">${p.name}</div>
+                `;
+                list.insertBefore(div, list.lastElementChild);
+            });
+        }
+
+        function showImportScreen() { document.getElementById('screen-import').classList.remove('hidden'); }
+        function closeImportScreen() { document.getElementById('screen-import').classList.add('hidden'); }
+
+        function importData() {
+            const code = document.getElementById('import-code').value.trim();
+            try {
+                const decoded = atob(code);
+                const parsed = JSON.parse(decoded);
+                if(!parsed.goals) throw new Error();
+
+                const newProfile = {
+                    id: Date.now().toString(),
+                    name: parsed.user || "User",
+                    config: parsed,
+                    logs: {}
+                };
+
+                db.profiles.push(newProfile);
+                saveDB();
+                closeImportScreen();
+                document.getElementById('import-code').value = "";
+                renderProfiles();
+            } catch(e) {
+                document.getElementById('auth-error').classList.remove('hidden');
+            }
+        }
+
+        function deleteProfile(id) {
+            if(confirm("Are you sure you want to delete this user? Data will be lost.")) {
+                db.profiles = db.profiles.filter(p => p.id !== id);
+                saveDB();
+                renderProfiles();
+            }
+        }
+
+        function login(id) {
+            activeProfile = db.profiles.find(p => p.id === id);
+            if(!activeProfile) return;
+
+            document.getElementById('screen-profiles').classList.add('hidden');
+            document.getElementById('screen-dashboard').classList.remove('hidden');
+            
+            document.getElementById('dash-username').innerText = activeProfile.name;
+            document.getElementById('dash-avatar').innerText = activeProfile.name.charAt(0).toUpperCase();
+
+            renderCalendar();
+            checkMissedDays();
+            
+            const today = formatDate(new Date());
+            selectDate(today);
+        }
+
+        function logout() {
+            activeProfile = null;
+            document.getElementById('screen-dashboard').classList.add('hidden');
+            document.getElementById('screen-profiles').classList.remove('hidden');
+        }
+
+        // --- DASHBOARD LOGIC ---
+        function formatDate(date) {
+            const offset = date.getTimezoneOffset() * 60000;
+            const localDate = new Date(date.getTime() - offset);
+            return localDate.toISOString().split('T')[0];
+        }
+
+        function renderCalendar() {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = today.getMonth();
+
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            
+            document.getElementById('month-display').innerText = today.toLocaleDateString(undefined, {month:'long', year:'numeric'});
+
+            const grid = document.getElementById('calendar-grid');
+            grid.innerHTML = "";
+
+            ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].forEach(d => grid.innerHTML += `<div class="day-name">${d}</div>`);
+
+            for(let i=0; i<firstDay.getDay(); i++) grid.innerHTML += `<div></div>`;
+
+            const todayStr = formatDate(today);
+
+            for(let i=1; i<=lastDay.getDate(); i++) {
+                const dateObj = new Date(year, month, i);
+                const dStr = formatDate(dateObj);
+                const hasLog = activeProfile.logs[dStr];
+                
+                let classes = "day-cell";
+                if(dStr === todayStr) classes += " today";
+                if(dStr > todayStr) classes += " disabled";
+                if(hasLog) classes += " logged";
+                if(dStr < todayStr && !hasLog) classes += " missed";
+
+                const div = document.createElement('div');
+                div.className = classes;
+                div.innerText = i;
+                div.onclick = () => selectDate(dStr);
+                div.id = `date-${dStr}`;
+                grid.appendChild(div);
+            }
+        }
+
+        function selectDate(dStr) {
+            const todayStr = formatDate(new Date());
+            selectedDate = dStr;
+
+            document.querySelectorAll('.day-cell').forEach(e => e.classList.remove('selected'));
+            const el = document.getElementById(`date-${dStr}`);
+            if(el) el.classList.add('selected');
+
+            const displayDate = new Date(dStr + "T00:00:00").toLocaleDateString(undefined, {weekday:'long', month:'long', day:'numeric'});
+            document.getElementById('selected-date-header').innerText = displayDate;
+
+            if(dStr > todayStr) {
+                document.getElementById('input-form').classList.add('hidden');
+                document.getElementById('future-msg').classList.remove('hidden');
+            } else {
+                document.getElementById('input-form').classList.remove('hidden');
+                document.getElementById('future-msg').classList.add('hidden');
+                
+                const log = activeProfile.logs[dStr] || {};
+                document.getElementById('inp-study').value = log.study || "";
+                document.getElementById('inp-fitness').checked = log.fitness || false;
+                document.getElementById('inp-creative').value = log.creative || "";
+                document.getElementById('inp-mental').checked = log.mental || false;
+                document.getElementById('inp-hobby').checked = log.hobby || false;
+            }
+        }
+
+        function saveDailyLog() {
+            if(!activeProfile || !selectedDate) return;
+            
+            const log = {
+                study: parseFloat(document.getElementById('inp-study').value) || 0,
+                fitness: document.getElementById('inp-fitness').checked,
+                creative: parseInt(document.getElementById('inp-creative').value) || 0,
+                mental: document.getElementById('inp-mental').checked,
+                hobby: document.getElementById('inp-hobby').checked
+            };
+
+            activeProfile.logs[selectedDate] = log;
+            saveDB();
+            renderCalendar();
+            checkMissedDays();
+            
+            const btn = document.querySelector('#input-form button');
+            const original = btn.innerText;
+            btn.innerText = "Saved!";
+            setTimeout(() => btn.innerText = original, 1000);
+            
+            // Launch small celebration on save
+            launchFireworks(window.innerWidth / 2, window.innerHeight); 
+        }
+
+        function checkMissedDays() {
+            const today = new Date();
+            const todayStr = formatDate(today);
+            let missed = [];
+            
+            for(let i=1; i<=31; i++) {
+                const d = new Date(today.getFullYear(), today.getMonth(), i);
+                const dStr = formatDate(d);
+                if(dStr >= todayStr) break;
+                if(!activeProfile.logs[dStr]) missed.push(i);
+            }
+
+            const bar = document.getElementById('notification-bar');
+            if(missed.length > 0) {
+                bar.classList.remove('hidden');
+                document.getElementById('missed-msg').innerText = missed.slice(-5).join(", ");
+            } else {
+                bar.classList.add('hidden');
+            }
+        }
+
+        // --- SMART ANALYSIS ENGINE ---
+        function generateMonthlyReport() {
+            const today = new Date();
+            const month = today.getMonth();
+            const year = today.getFullYear();
+            
+            let totalStudy = 0;
+            let fitnessCount = 0;
+            let totalDaysLogged = 0;
+            let daysPassed = today.getDate();
+
+            for(let i=1; i<=daysPassed; i++) {
+                const dStr = formatDate(new Date(year, month, i));
+                const log = activeProfile.logs[dStr];
+                if(log) {
+                    totalDaysLogged++;
+                    totalStudy += log.study;
+                    if(log.fitness) fitnessCount++;
+                }
+            }
+
+            const g = activeProfile.config.goals;
+            const expectedStudy = (g.study / 7) * daysPassed;
+            
+            const consistency = (totalDaysLogged / daysPassed) * 100;
+            let verdict = "🤔 Assessing...";
+            let color = "var(--text-main)";
+
+            if(consistency > 85 && totalStudy >= expectedStudy * 0.9) {
+                verdict = "🔥 UNSTOPPABLE"; color = "var(--success)";
+                launchMultipleFireworks();
+            } else if (consistency > 70) {
+                verdict = "✅ STEADY PROGRESS"; color = "var(--primary)";
+            } else if (consistency > 40) {
+                verdict = "⚠️ INCONSISTENT"; color = "var(--warning)";
+            } else {
+                verdict = "🛑 NEEDS A RESET"; color = "var(--missed)";
+            }
+
+            const html = `
+                <div class="stat-verdict" style="color: ${color}">${verdict}</div>
+                <div class="stat-row"><span>Consistency Rate</span><strong>${Math.round(consistency)}%</strong></div>
+                <div class="stat-row"><span>Study Hours</span><span>${totalStudy.toFixed(1)} / <small style="color:var(--text-muted)">${Math.round(expectedStudy)} target</small></span></div>
+                <div class="stat-row"><span>Fitness Sessions</span><span>${fitnessCount}</span></div>
+                <div style="margin-top:20px; font-size: 0.9rem; color: var(--text-muted); text-align:center;">"You have logged data for ${totalDaysLogged} out of ${daysPassed} days."</div>
+            `;
+
+            document.getElementById('analysis-content').innerHTML = html;
+            document.getElementById('modal-analysis').classList.remove('hidden');
+        }
+
+        // --- 🎆 REALISTIC FIREWORKS ENGINE ---
+        const canvas = document.getElementById('fireworks-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        let rockets = [];
+
+        function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+        window.addEventListener('resize', resizeCanvas);
+
+        function random(min, max) { return Math.random() * (max - min) + min; }
+
+        class Rocket {
+            constructor(x, targetY) {
+                this.x = x;
+                this.y = canvas.height;
+                this.targetY = targetY;
+                this.speed = random(8, 12);
+                this.color = `hsl(${random(0, 360)}, 100%, 70%)`;
+                this.exploded = false;
+            }
+            update(index) {
+                this.y -= this.speed;
+                // Add trail
+                particles.push(new Particle(this.x, this.y, this.color, true));
+                
+                if (this.y <= this.targetY) {
+                    this.explode();
+                    rockets.splice(index, 1);
+                }
+            }
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            explode() {
+                // Create explosion particles
+                for (let i = 0; i < 80; i++) {
+                    particles.push(new Particle(this.x, this.y, this.color, false));
+                }
+            }
+        }
+
+        class Particle {
+            constructor(x, y, color, isTrail) {
+                this.x = x;
+                this.y = y;
+                this.isTrail = isTrail;
+                if(isTrail) {
+                    this.angle = random(0, Math.PI * 2);
+                    this.speed = random(0.5, 2);
+                    this.decay = 0.08;
+                    this.gravity = 0;
+                    this.size = random(0.5, 1.5);
+                } else {
+                    this.angle = random(0, Math.PI * 2);
+                    this.speed = random(1, 6);
+                    this.decay = random(0.01, 0.02); // Slower decay = longer animation
+                    this.gravity = 0.1; // Pulls down
+                    this.size = random(1, 3);
+                }
+                this.color = color;
+                this.alpha = 1;
+            }
+            update(index) {
+                this.speed *= 0.96; // Friction
+                this.x += Math.cos(this.angle) * this.speed;
+                this.y += Math.sin(this.angle) * this.speed + this.gravity;
+                this.alpha -= this.decay;
+                
+                if (this.alpha <= 0) particles.splice(index, 1);
+            }
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        function launchFireworks(x, y) {
+            // Launch a rocket to height y (or random height if y not specified)
+            rockets.push(new Rocket(x || random(50, canvas.width - 50), y || random(50, canvas.height / 2)));
+        }
+
+        function launchMultipleFireworks() {
+            let count = 0;
+            let interval = setInterval(() => {
+                launchFireworks();
+                count++;
+                if(count > 5) clearInterval(interval);
+            }, 300);
+        }
+
+        function loop() {
+            requestAnimationFrame(loop);
+            
+            // Trail effect background
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)'; // Slower clear for trails
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.globalCompositeOperation = 'lighter';
+            
+            // Update Rockets
+            let r = rockets.length;
+            while(r--) {
+                rockets[r].draw();
+                rockets[r].update(r);
+            }
+
+            // Update Particles
+            let i = particles.length;
+            while(i--) {
+                particles[i].draw();
+                particles[i].update(i);
+            }
+
+            // Random Ambient Fireworks (less frequent)
+            if (random(0, 1) < 0.015) {
+                launchFireworks();
+            }
+        }
+
+    </script>
+</body>
+</html>
